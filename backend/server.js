@@ -18,7 +18,9 @@ const app = express();
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:3000',
-    process.env.FRONTEND_URL || 'https://your-app.vercel.app'
+    'https://task-flow1-hec3x64hj-kunalrathee1s-projects.vercel.app',
+    'https://task-flow1.vercel.app', // Production Vercel URL
+    process.env.FRONTEND_URL
 ];
 
 app.use(cors({
