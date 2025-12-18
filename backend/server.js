@@ -19,22 +19,21 @@ const app = express();
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:3000',
-    'https://task-flow1.vercel.app',
-    'https://task-flow1-hec3x64hj-kunalrathee1s-projects.vercel.app',
     process.env.FRONTEND_URL
-].filter(Boolean); // Remote undefined values
+].filter(Boolean);
 
 app.use(cors({
     origin: function (origin, callback) {
         // Allow requests with no origin (mobile apps, Postman, etc.)
         if (!origin) return callback(null, true);
 
-        if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes(origin)) {
+        // Flexible Check: Allow any Vercel deployment of this app
+        const isVercelApp = origin.includes('.vercel.app');
+
+        if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes(origin) || isVercelApp) {
             callback(null, true);
         } else {
             console.log('Blocked by CORS:', origin);
-            // In development, you might want to allow all: callback(null, true);
-            // For production safety, we block unknown origins:
             callback(new Error(`Not allowed by CORS: ${origin}`));
         }
     },
