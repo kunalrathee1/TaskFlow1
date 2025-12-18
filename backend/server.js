@@ -14,27 +14,33 @@ connectDB();
 
 const app = express();
 
-// Middleware - CORS configuration for production
+// Middleware - Robust CORS configuration
+// Define allowed origins
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:3000',
+    'https://task-flow1.vercel.app',
     'https://task-flow1-hec3x64hj-kunalrathee1s-projects.vercel.app',
-    'https://task-flow1.vercel.app', // Production Vercel URL
     process.env.FRONTEND_URL
-];
+].filter(Boolean); // Remote undefined values
 
 app.use(cors({
     origin: function (origin, callback) {
         // Allow requests with no origin (mobile apps, Postman, etc.)
         if (!origin) return callback(null, true);
 
-        if (allowedOrigins.indexOf(origin) !== -1) {
+        if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
-            callback(new Error('Not allowed by CORS'));
+            console.log('Blocked by CORS:', origin);
+            // In development, you might want to allow all: callback(null, true);
+            // For production safety, we block unknown origins:
+            callback(new Error(`Not allowed by CORS: ${origin}`));
         }
     },
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
