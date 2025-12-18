@@ -1,0 +1,363 @@
+================================================================================
+                    JWT TOKEN IMPLEMENTATION IN TASKFLOW
+================================================================================
+
+YES! JWT (JSON Web Token) is FULLY IMPLEMENTED and ACTIVELY USED
+
+Package: jsonwebtoken v9.0.2
+Location: backend/controllers/authController.js & backend/middleware/authMiddleware.js
+
+================================================================================
+                    HOW JWT IS USED - COMPLETE FLOW
+================================================================================
+
+1. TOKEN GENERATION (authController.js)
+========================================
+
+Function: generateToken(id)
+Location: Line 5-9 in authController.js
+
+Code:
+-----
+const generateToken = (id) => {
+    return jwt.sign({ id }, process.env.JWT_SECRET, {
+        expiresIn: '30d',
+    });
+};
+
+What it does:
+- Takes user ID as input
+- Signs the token with JWT_SECRET from .env file
+- Sets expiration to 30 days
+- Returns encrypted JWT token string
+
+JWT_SECRET: taskflow_super_secret_jwt_key_2024_change_in_production
+
+
+2. TOKEN ISSUED ON SIGNUP (Line 39)
+====================================
+
+When: User creates new account
+Endpoint: POST /api/auth/signup
+
+Response includes:
+{
+    "_id": "user_id",
+    "name": "User Name",
+    "email": "user@email.com",
+    "avatar": "avatar_url",
+    "role": "user",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." ← JWT TOKEN HERE
+}
+
+The token is generated on line 39:
+token: generateToken(user._id)
+
+
+3. TOKEN ISSUED ON LOGIN (Line 66)
+===================================
+
+When: User logs in
+Endpoint: POST /api/auth/login
+
+Response includes:
+{
+    "_id": "user_id",
+    "name": "User Name",
+    "email": "user@email.com",
+    "avatar": "avatar_url",
+    "role": "user",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." ← JWT TOKEN HERE
+}
+
+The token is generated on line 66:
+token: generateToken(user._id)
+
+
+4. TOKEN STORED IN FRONTEND
+============================
+
+Location: frontend/src/context/AuthContext.jsx
+
+When user logs in or signs up:
+1. Token received from backend
+2. Stored in localStorage: localStorage.setItem('token', data.token)
+3. Stored in Context state: setToken(data.token)
+4. Added to Axios headers: axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${data.token}`
+
+
+5. TOKEN SENT WITH EVERY REQUEST
+=================================
+
+Location: frontend/src/utils/axiosInstance.js
+
+Axios Interceptor (automatically adds token to all requests):
+
+axiosInstance.interceptors.request.use(
+    (config) => {
+        const token = localStorage.getItem('token');
+        if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+    }
+);
+
+Every API request includes:
+Headers: {
+    "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+
+
+6. TOKEN VERIFICATION (authMiddleware.js)
+==========================================
+
+Function: protect()
+Location: backend/middleware/authMiddleware.js
+
+How it works:
+-------------
+Step 1: Extract token from Authorization header (Line 13)
+   token = req.headers.authorization.split(' ')[1]
+   
+Step 2: Verify token with JWT_SECRET (Line 16)
+   const decoded = jwt.verify(token, process.env.JWT_SECRET)
+   
+Step 3: Extract user ID from decoded token
+   decoded.id contains the user ID
+   
+Step 4: Fetch user from database (Line 19)
+   req.user = await User.findById(decoded.id).select('-password')
+   
+Step 5: Attach user to request object
+   Now all protected routes have access to req.user
+   
+Step 6: Call next() to proceed to route handler (Line 25)
+
+
+7. PROTECTED ROUTES USING JWT
+==============================
+
+All these routes require JWT token:
+
+AUTHENTICATION:
+- GET  /api/auth/profile    (requires token)
+- PUT  /api/auth/profile    (requires token)
+- GET  /api/auth/users      (requires token)
+
+PROJECTS:
+- GET    /api/projects      (requires token)
+- POST   /api/projects      (requires token)
+- GET    /api/projects/:id  (requires token)
+- PUT    /api/projects/:id  (requires token)
+- DELETE /api/projects/:id  (requires token)
+- GET    /api/projects/:id/stats (requires token)
+
+TASKS:
+- POST   /api/tasks         (requires token)
+- GET    /api/tasks/my-tasks (requires token)
+- GET    /api/tasks/project/:id (requires token)
+- GET    /api/tasks/:id     (requires token)
+- PUT    /api/tasks/:id     (requires token)
+- DELETE /api/tasks/:id     (requires token)
+- POST   /api/tasks/:id/comments (requires token)
+- PATCH  /api/tasks/:id/status (requires token)
+
+Example Route Protection:
+-------------------------
+router.get('/profile', protect, getProfile);
+                       ↑
+                   JWT middleware
+
+
+8. JWT TOKEN STRUCTURE
+=======================
+
+A JWT token has 3 parts separated by dots (.):
+
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5MzcwNzliMzJjMWU0MzllZmYzYjc3OSIsImlhdCI6MTc2NTIxNDEwNywiZXhwIjoxNzY3ODA2MTA3fQ.dfsF3_uvLrkx4KLw2DqjUDasIrUIOtZL3y054Q0WuUA
+
+Part 1: Header (Algorithm & Token Type)
+{
+  "alg": "HS256",
+  "typ": "JWT"
+}
+
+Part 2: Payload (User Data)
+{
+  "id": "6937079b32c1e439eff3b779",  ← User ID
+  "iat": 1765214107,                  ← Issued At (timestamp)
+  "exp": 1767806107                   ← Expiration (30 days later)
+}
+
+Part 3: Signature (Encrypted with JWT_SECRET)
+- Ensures token hasn't been tampered with
+- Only server with JWT_SECRET can verify
+
+
+9. TOKEN EXPIRATION
+====================
+
+Expiry: 30 days (2,592,000 seconds)
+Set in: generateToken() function
+
+After 30 days:
+- Token becomes invalid
+- jwt.verify() throws error
+- User must login again
+- New token issued
+
+
+10. SECURITY FEATURES
+=====================
+
+✅ Token signed with secret key (JWT_SECRET)
+✅ Token cannot be modified without secret
+✅ Token expires after 30 days
+✅ Token stored in localStorage (persistent)
+✅ Token sent in Authorization header (not in URL)
+✅ Token verified on every protected request
+✅ User password never sent in token (only user ID)
+✅ Token automatically added to all requests (Axios interceptor)
+✅ Invalid tokens rejected with 401 error
+✅ Missing tokens rejected with 401 error
+
+
+11. COMPLETE AUTHENTICATION FLOW
+=================================
+
+SIGNUP/LOGIN:
+1. User submits credentials
+2. Backend validates credentials
+3. Backend generates JWT token with user ID
+4. Token sent to frontend in response
+5. Frontend stores token in localStorage
+6. Frontend stores token in Context
+7. Frontend adds token to Axios headers
+
+ACCESSING PROTECTED ROUTES:
+1. User clicks on Dashboard
+2. Frontend makes GET request to /api/projects
+3. Axios interceptor adds token to Authorization header
+4. Request sent to backend with token
+5. Backend protect middleware extracts token
+6. Backend verifies token with JWT_SECRET
+7. Backend decodes user ID from token
+8. Backend fetches user from database
+9. Backend attaches user to req.user
+10. Route handler accesses req.user
+11. Response sent back to frontend
+12. Frontend updates UI with data
+
+LOGOUT:
+1. User clicks logout
+2. Frontend removes token from localStorage
+3. Frontend removes token from Context
+4. Frontend removes token from Axios headers
+5. User redirected to login page
+
+
+12. REAL EXAMPLE - TESTED AND WORKING
+======================================
+
+Test Command:
+curl -X POST http://localhost:5001/api/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Test User","email":"test@example.com","password":"test123"}'
+
+Response:
+{
+  "_id": "6937079b32c1e439eff3b779",
+  "name": "Test User",
+  "email": "test@example.com",
+  "avatar": "https://ui-avatars.com/api/?background=6366f1&color=fff&name=Test%20User",
+  "role": "user",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5MzcwNzliMzJjMWU0MzllZmYzYjc3OSIsImlhdCI6MTc2NTIxNDEwNywiZXhwIjoxNzY3ODA2MTA3fQ.dfsF3_uvLrkx4KLw2DqjUDasIrUIOtZL3y054Q0WuUA"
+}
+
+✅ JWT TOKEN SUCCESSFULLY GENERATED AND RETURNED!
+
+
+13. ERROR HANDLING
+==================
+
+Invalid Token:
+- Error: "Not authorized, token failed"
+- Status: 401 Unauthorized
+
+Missing Token:
+- Error: "Not authorized, no token"
+- Status: 401 Unauthorized
+
+Expired Token:
+- Error: jwt.verify() throws TokenExpiredError
+- Status: 401 Unauthorized
+- Frontend intercepts and redirects to login
+
+User Not Found:
+- Error: "User not found"
+- Status: 401 Unauthorized
+
+
+14. CODE LOCATIONS
+==================
+
+JWT Generation:
+- File: backend/controllers/authController.js
+- Lines: 1, 5-9, 39, 66, 122
+
+JWT Verification:
+- File: backend/middleware/authMiddleware.js
+- Lines: 1, 4-35
+
+JWT Storage (Frontend):
+- File: frontend/src/context/AuthContext.jsx
+- Lines: Token stored in localStorage and state
+
+JWT Sending (Frontend):
+- File: frontend/src/utils/axiosInstance.js
+- Lines: Axios interceptor adds token to headers
+
+
+15. ADVANTAGES OF JWT IN TASKFLOW
+==================================
+
+✅ Stateless Authentication
+   - No session storage needed on server
+   - Server doesn't need to remember logged-in users
+   - Scalable for multiple servers
+
+✅ Self-Contained
+   - Token contains all user info (user ID)
+   - No database lookup needed to identify user
+   - Fast authentication
+
+✅ Secure
+   - Encrypted with secret key
+   - Cannot be tampered with
+   - Expires automatically
+
+✅ Cross-Domain
+   - Works across different domains
+   - Perfect for separate frontend/backend
+
+✅ Mobile-Friendly
+   - Easy to use in mobile apps
+   - No cookies needed
+
+
+================================================================================
+                            CONCLUSION
+================================================================================
+
+✅ YES! JWT is FULLY IMPLEMENTED and WORKING in TaskFlow
+
+JWT is used for:
+- User authentication
+- Protecting all API routes
+- Maintaining user sessions
+- Secure communication between frontend and backend
+
+Every protected API request uses JWT token authentication!
+
+================================================================================
